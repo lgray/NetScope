@@ -2,6 +2,9 @@
  * Copyright (c) 2012 - 2017
  *
  *     Yuan Mei
+ ***
+ * Additions by lgray to control state and setup trigger
+ * This code is neatly compatible with 7000 series scopes.
  *
  * All rights reserved.
  *
@@ -83,6 +86,30 @@
 } while (0)
 #endif
 
+static char configure_fastframe[] = "ACQUIRE:MODE SAMPLE;:HORizontal:FASTframe:SEQuence FIRST;:HORizontal:FASTframe:COUNt 500\n";
+static char configure_capture[] = "HORIZONTAL:MODE:SCALE 500E-9;:CH1:POSITION 0E-3;:CH1:OFFSET 0E-3;:CH1:SCALE 1500E-3\n";
+static char configure_trigger1[] = "TRIGGER:A:TYPE EDGE;:TRIGGER:A:LEVEL 500.0000E-3;:TRIGGER:A:EDGE:SOURCE CH1\n";
+static char configure_trigger2[] = "TRIGGER:A:EDGE:SLOPE:CH1 RISE;:TRIGGER:A:MODE NORMAL\n";
+
+static char force_trigger[] = "*TRG\n";
+
+static char gpib_init[] = "INIT\n";
+
+
+static char clear_device[] = "CLEAR ALL\n";
+static char reset_to_default[] = "*RST\n";
+static char reset_counters[] = ":MASK:COUNT\n";
+
+static char ask_acquiring[] = "ACQuire:STATE?\n";
+static char start_acquiring[] = "ACQuire:STATE RUN;:ACQuire:STATE?\n";
+static char stop_acquiring[]  = "ACQuire:STATE STOP;:ACQuire:STATE?\n";
+
+static char acquire_runs[] = "ACQuire:STOPAfter RUNSTOP\n";
+static char acquire_singles[] = "ACQuire:STOPAfter SEQUENCE\n";
+
+static char enable_fastframe[] = "HORizontal:FASTframe:STATE ON\n";
+static char disable_fastframe[] = "HORizontal:FASTframe:STATE OFF\n";
+
 static unsigned int chMask;
 static size_t nCh;
 static size_t nEvents;
@@ -91,7 +118,7 @@ static struct hdf5io_waveform_file *waveformFile;
 static struct hdf5io_waveform_event waveformEvent;
 static struct waveform_attribute waveformAttr;
 
-#define FIFO_SIZE (512*1024*1024)
+#define FIFO_SIZE (1024*1024*1024) // 512*1024*1024
 static struct fifo_t *fifo;
 
 #define MAXSLEEP 2
@@ -208,21 +235,88 @@ static int query_response(int sockfd, char *queryStr, char *respStr)
     return query_response_with_timeout(sockfd, queryStr, respStr, &tv);
 }
 
+static int start_scope(int sockfd) {
+  printf("start scope!\n");  
+  
+  int ret;
+  char buf[BUFSIZ];
+  
+  strlcpy(buf, reset_counters, sizeof(buf));
+  ret = query_response(sockfd, buf, buf);
+  
+  strlcpy(buf, clear_device, sizeof(buf));
+  ret = query_response(sockfd, buf, buf); 
+  
+  strlcpy(buf, start_acquiring, sizeof(buf));
+  ret = query_response(sockfd, buf, buf); 
+  
+  strlcpy(buf, ask_acquiring, sizeof(buf));
+  ret = query_response(sockfd, buf, buf);
+  buf[ret] = '\0';
+
+  printf("%s",buf);
+  
+  return ret;
+}
+
+static int stop_scope(int sockfd) {
+  printf("stop scope!\n");  
+  
+  int ret;
+  char buf[BUFSIZ];
+
+  strlcpy(buf, stop_acquiring, sizeof(buf));
+  ret = query_response(sockfd, buf, buf);
+  
+  strlcpy(buf, disable_fastframe, sizeof(buf));
+  ret = query_response(sockfd, buf, buf);
+  
+  strlcpy(buf, reset_counters, sizeof(buf));
+  ret = query_response(sockfd, buf, buf);
+
+  strlcpy(buf, clear_device, sizeof(buf));
+  ret = query_response(sockfd, buf, buf);  
+  
+  return ret;
+}
+
 static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
 /* fills wavAttr as well */
 {
+  printf("prepare scope!\n");
     int ret, ich, isFastFrame;
     char buf[BUFSIZ], buf1[BUFSIZ], buf2[BUFSIZ];
     
     wavAttr->chMask = chMask;
 
+    //make user headers are turned off
+    strlcpy(buf, "HEADer OFF\n", sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+    buf[ret] = '\0';
+    printf("%s", buf);
+
+    // put the device in a known state
+    // not taking data and fully cleared
+    //strlcpy(buf, stop_acquiring, sizeof(buf));
+    //ret = query_response(sockfd, buf, buf);
+    strlcpy(buf, reset_to_default, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+    sleep(3); // requires three seconds to reset
+    //make sure we're not acquiring while we configure
+    strlcpy(buf, stop_acquiring, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+    strlcpy(buf, reset_counters, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+    strlcpy(buf, clear_device, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);    
+    
     strlcpy(buf, "*IDN?\n", sizeof(buf));
     ret = query_response(sockfd, buf, buf);
     buf[ret] = '\0';
     printf("%s", buf);
 
     strlcpy(buf, "DATa:ENCdg fastest;:", sizeof(buf));
-    strlcpy(buf1, "data:source ", sizeof(buf1));
+    strlcpy(buf1, ":data:source ", sizeof(buf1));
     for(ich=0; ich<SCOPE_NCH; ich++) {
         if((chMask >> ich) & 0x01) {
             snprintf(buf2, sizeof(buf2), "select:ch%d 1;:", ich+1);
@@ -243,7 +337,13 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
     ret = query_response(sockfd, buf, buf);
     sscanf(buf, "%zd;%lf;%lf", &(wavAttr->nPt), &(wavAttr->dt), &(wavAttr->t0));
     wavAttr->t0 *= wavAttr->dt;
+        
+    strlcpy(buf, configure_fastframe, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
 
+    strlcpy(buf, enable_fastframe, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+    
     strlcpy(buf, "HORizontal:FASTframe:STATE?;:HORizontal:FASTframe:COUNt?\n", sizeof(buf));
     ret = query_response(sockfd, buf, buf);
     sscanf(buf, "%d;%zd", &isFastFrame, &(wavAttr->nFrames));
@@ -258,9 +358,11 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
         snprintf(buf, sizeof(buf), "data:source ch%d;%s\n", ich+1,
                  ":data:encdg FAStest;:WFMOutpre:BYT_Nr 1;"
                  ":WFMOutpre:YMUlt?;:WFMOutpre:YOFf?;:WFMOutpre:YZEro?");
+	printf("sending: %s",buf);
         ret = query_response(sockfd, buf, buf);
         sscanf(buf, "%lf;%lf;%lf", &(wavAttr->ymult[ich]), &(wavAttr->yoff[ich]),
                &(wavAttr->yzero[ich]));
+	printf("received: %s",buf);
     }
 
     printf("waveform_attribute:\n"
@@ -282,6 +384,20 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
     /* set waveform range */
     snprintf(buf, sizeof(buf), "data:start 1;:data:stop %zd\n", wavAttr->nPt);
     ret = query_response(sockfd, buf, buf);
+
+    //setup triggers and such
+    strlcpy(buf, configure_capture, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+    
+    strlcpy(buf, configure_trigger1, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+        
+    strlcpy(buf, configure_trigger2, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+    
+    strlcpy(buf, reset_counters, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
 
     return ret;
 }
@@ -313,6 +429,7 @@ static size_t raw_event_size(struct hdf5io_waveform_file *wavFile)
 
 static void *receive_and_push(void *arg)
 {
+  printf("receive and push!\n");
     struct timeval tv; /* tv should be re-initialized in the loop since select
                           may change it after each call */
     int sockfd, maxfd, nsel;
@@ -327,7 +444,9 @@ static void *receive_and_push(void *arg)
         return (void*)NULL;
     }
 */
+
     sockfd = *((int*)arg);
+    
     if(nEvents > 0)
         strlcpy(ibuf, "CURVENext?\n", sizeof(ibuf));
     else {
@@ -338,8 +457,10 @@ static void *receive_and_push(void *arg)
 
     rawEventSize = raw_event_size(waveformFile);
     readTotal = 0;
+
+            
     for(;;) {
-        tv.tv_sec = 10;
+        tv.tv_sec = 1;
         tv.tv_usec = 0;
         FD_ZERO(&rfd);
         FD_SET(sockfd, &rfd);
@@ -534,11 +655,15 @@ int main(int argc, char **argv)
     signal(SIGKILL, signal_kill_handler);
     signal(SIGINT, signal_kill_handler);
 
+    start_scope(sockfd);
+    
     pthread_create(&wTid, NULL, pop_and_save, &sockfd);
 
     printf("start time = %zd\n", startTime = time(NULL));
 
     receive_and_push(&sockfd);
+
+    stop_scope(sockfd);
 
 /*
     do {
@@ -559,6 +684,8 @@ int main(int argc, char **argv)
 
     stopTime = time(NULL);
     pthread_join(wTid, NULL);
+
+    
 
     printf("\nstart time = %zd\n", startTime);
     printf("stop time  = %zd\n", stopTime);

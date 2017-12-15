@@ -87,6 +87,19 @@ static unsigned int chMask;
 static size_t nCh;
 static size_t nEvents;
 
+
+static char configure_fastframe[] = "ACQUIRE:MODE SAMPLE;:ACQuire:STOPAfter RUNSTOP;:HORizontal:FASTframe:SEQuence FIRST;:HORizontal:FASTframe:COUNt 500\n";
+static char configure_trigger1[] = "TRIGGER:A:TYPE EDGE;:TRIGGER:A:LEVEL 500.0000E-3;:TRIGGER:A:EDGE:SOURCE CH1\n";
+static char configure_trigger2[] = "TRIGGER:A:EDGE:SLOPE:CH1 RISE;:TRIGGER:A:MODE NORMAL\n";
+static char configure_capture[] = "HORIZONTAL:MODE:SCALE 500E-9;:CH1:POSITION 0E-3;:CH1:OFFSET 0E-3;:CH1:SCALE 1500E-3\n";
+static char reset_to_default[] = "*RST\n";
+
+static char enable_fastframe[] = "HORizontal:FASTframe:STATE ON\n";
+static char disable_fastframe[] = "HORizontal:FASTframe:STATE OFF\n";
+
+static char start_acquiring[] = "ACQuire:STATE ON\n";
+static char stop_acquiring[]  = "ACQuire:STATE OFF\n";
+
 static struct hdf5io_waveform_file *waveformFile;
 static struct hdf5io_waveform_event waveformEvent;
 static struct waveform_attribute waveformAttr;
@@ -221,6 +234,31 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
     buf[ret] = '\0';
     printf("%s", buf);
 
+    strlcpy(buf, reset_to_default, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+    sleep(3); 
+
+    strlcpy(buf, "ACQuire:STATE OFF\n", sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
+    strlcpy(buf, "MASK:COUNT RESET\n", sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
+    strlcpy(buf, configure_trigger1, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+        
+    strlcpy(buf, configure_trigger2, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
+    strlcpy(buf, configure_capture, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
+    strlcpy(buf, configure_fastframe, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
+    strlcpy(buf, enable_fastframe, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
     strlcpy(buf, "DATa:ENCdg fastest;:", sizeof(buf));
     strlcpy(buf1, "data:source ", sizeof(buf1));
     for(ich=0; ich<SCOPE_NCH; ich++) {
@@ -276,6 +314,9 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
            wavAttr->ymult[0], wavAttr->ymult[1], wavAttr->ymult[2], wavAttr->ymult[3],
            wavAttr->yoff[0], wavAttr->yoff[1], wavAttr->yoff[2], wavAttr->yoff[3],
            wavAttr->yzero[0], wavAttr->yzero[1], wavAttr->yzero[2], wavAttr->yzero[3]);
+    
+    strlcpy(buf, start_acquiring, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
 
     /* data:source to selected channels */
     ret = query_response(sockfd, buf1, buf);
@@ -373,6 +414,12 @@ static void *receive_and_push(void *arg)
         }
     }
 end:
+
+    strlcpy(ibuf, stop_acquiring, sizeof(ibuf));
+    query_response(sockfd, ibuf, ibuf);
+
+    strlcpy(ibuf, disable_fastframe, sizeof(ibuf));
+    query_response(sockfd, ibuf, ibuf);
 
 //    fclose(fp);
     return (void*)NULL;

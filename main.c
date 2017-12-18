@@ -88,10 +88,10 @@ static size_t nCh;
 static size_t nEvents;
 
 
-static char configure_fastframe[] = "ACQUIRE:MODE SAMPLE;:ACQuire:STOPAfter RUNSTOP;:HORizontal:FASTframe:SEQuence FIRST;:HORizontal:FASTframe:COUNt 500\n";
-static char configure_trigger1[] = "TRIGGER:A:TYPE EDGE;:TRIGGER:A:LEVEL 500.0000E-3;:TRIGGER:A:EDGE:SOURCE CH1\n";
+static char configure_fastframe[] = "ACQUIRE:MODE SAMPLE;:ACQuire:STOPAfter RUNSTOP;:HORizontal:FASTframe:SEQuence FIRST;:HORizontal:FASTframe:COUNt 300\n";
+static char configure_trigger1[] = "TRIGGER:A:TYPE EDGE;:TRIGGER:A:LEVEL -50.0000E-3;:TRIGGER:A:EDGE:SOURCE CH1\n";
 static char configure_trigger2[] = "TRIGGER:A:EDGE:SLOPE:CH1 RISE;:TRIGGER:A:MODE NORMAL\n";
-static char configure_capture[] = "HORIZONTAL:MODE:SCALE 500E-9;:CH1:POSITION 0E-3;:CH1:OFFSET 0E-3;:CH1:SCALE 1500E-3\n";
+static char configure_capture[] = "HORIZONTAL:MODE:SCALE 500E-9;:CH1:POSITION 0E-3;:CH1:OFFSET 0E-3;:CH1:SCALE 100-3\n";
 static char reset_to_default[] = "*RST\n";
 
 static char enable_fastframe[] = "HORizontal:FASTframe:STATE ON\n";
@@ -246,8 +246,20 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
 
     strlcpy(buf, configure_trigger1, sizeof(buf));
     ret = query_response(sockfd, buf, buf);
-        
+
     strlcpy(buf, configure_trigger2, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
+    strlcpy(buf, ":CH1:TER 50;\n", sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
+    strlcpy(buf, ":CH2:TER 50;\n", sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
+    strlcpy(buf, ":CH3:TER 50;\n", sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
+    strlcpy(buf, ":CH4:TER 50;\n", sizeof(buf));
     ret = query_response(sockfd, buf, buf);
 
     strlcpy(buf, configure_capture, sizeof(buf));

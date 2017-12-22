@@ -11,11 +11,11 @@ struct waveform_attribute
     unsigned int chMask;
     size_t nPt; /* number of points in each event */
     size_t nFrames; /* number of Fast Frames in each event, 0 means off */
-    double dt;
-    double t0;
-    double ymult[SCOPE_NCH];
-    double yoff[SCOPE_NCH];
-    double yzero[SCOPE_NCH];
+    float dt;
+    float t0;
+    float ymult[SCOPE_NCH];
+    float yoff[SCOPE_NCH];
+    float yzero[SCOPE_NCH];
 };
 
 #endif /* __COMMON_H__ */

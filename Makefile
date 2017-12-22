@@ -45,7 +45,7 @@ ifeq ($(ARCH), ppc970)
   CFLAGS += -m64
 endif
 ############################ Define targets ###################################
-EXE_TARGETS = dpo5054 wavedump
+EXE_TARGETS = dpo5054 wavedump convert_ots2hdf5
 DEBUG_EXE_TARGETS = hdf5io
 # SHLIB_TARGETS = XXX$(SHLIB_EXT)
 
@@ -67,6 +67,8 @@ analyze_pe: analysis/analyze_pe.c hdf5io.o
 analyze_int: analysis/analyze_int.c hdf5io.o
 	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
 wavedump: analysis/wavedump.c hdf5io.o
+	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
+convert_ots2hdf5: analysis/convert_ots2hdf5.c hdf5io.o fifo.o
 	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LIBS) $(LDFLAGS) -o $@
 hdf5io.o: hdf5io.c hdf5io.h
 	$(CC) $(CFLAGS) -DH5_NO_DEPRECATED_SYMBOLS $(INCLUDE) -c $<

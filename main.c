@@ -89,9 +89,10 @@ static size_t nEvents;
 
 
 static char configure_fastframe[] = "ACQUIRE:MODE SAMPLE;:ACQuire:STOPAfter RUNSTOP;:HORizontal:FASTframe:SEQuence FIRST;:HORizontal:FASTframe:COUNt 300\n";
-static char configure_trigger1[] = "TRIGGER:A:TYPE EDGE;:TRIGGER:A:LEVEL -50.0000E-3;:TRIGGER:A:EDGE:SOURCE CH1\n";
+static char configure_termination[] = ":CH1:TER 50;:CH2:TER 50;:CH3:TER 50;:CH4:TER 50;\n";
+static char configure_trigger1[] = "TRIGGER:A:TYPE EDGE;:TRIGGER:A:LEVEL 250.0000E-3;:TRIGGER:A:EDGE:SOURCE CH1\n";
 static char configure_trigger2[] = "TRIGGER:A:EDGE:SLOPE:CH1 RISE;:TRIGGER:A:MODE NORMAL\n";
-static char configure_capture[] = "HORIZONTAL:MODE:SCALE 500E-9;:CH1:POSITION 0E-3;:CH1:OFFSET 0E-3;:CH1:SCALE 100-3\n";
+static char configure_capture[] = "HORIZONTAL:MODE:SCALE 500E-9;:CH1:POSITION 0E-3;:CH1:OFFSET 0E-3;:CH1:SCALE 1.0\n";
 static char reset_to_default[] = "*RST\n";
 
 static char enable_fastframe[] = "HORizontal:FASTframe:STATE ON\n";
@@ -99,6 +100,9 @@ static char disable_fastframe[] = "HORizontal:FASTframe:STATE OFF\n";
 
 static char start_acquiring[] = "ACQuire:STATE ON\n";
 static char stop_acquiring[]  = "ACQuire:STATE OFF\n";
+
+static char enable_display[] = "DISPLAY:WAVEFORM ON\n";
+static char disable_display[] = "DISPLAY:WAVEFORM OFF\n";
 
 static struct hdf5io_waveform_file *waveformFile;
 static struct hdf5io_waveform_event waveformEvent;
@@ -262,14 +266,17 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
     strlcpy(buf, ":CH4:TER 50;\n", sizeof(buf));
     ret = query_response(sockfd, buf, buf);
 
+    strlcpy(buf, disable_display, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+
     strlcpy(buf, configure_capture, sizeof(buf));
     ret = query_response(sockfd, buf, buf);
 
-    strlcpy(buf, configure_fastframe, sizeof(buf));
-    ret = query_response(sockfd, buf, buf);
+    //strlcpy(buf, configure_fastframe, sizeof(buf));
+    //ret = query_response(sockfd, buf, buf);
 
-    strlcpy(buf, enable_fastframe, sizeof(buf));
-    ret = query_response(sockfd, buf, buf);
+    //strlcpy(buf, enable_fastframe, sizeof(buf));
+    //ret = query_response(sockfd, buf, buf);
 
     strlcpy(buf, "DATa:ENCdg fastest;:", sizeof(buf));
     strlcpy(buf1, "data:source ", sizeof(buf1));
@@ -291,12 +298,12 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
 
     strlcpy(buf, "HORizontal:ACQLENGTH?;:WFMOutpre:XINcr?;:WFMOutpre:PT_Off?\n", sizeof(buf));
     ret = query_response(sockfd, buf, buf);
-    sscanf(buf, "%zd;%lf;%lf", &(wavAttr->nPt), &(wavAttr->dt), &(wavAttr->t0));
+    sscanf(buf, "%zu;%f;%f", &(wavAttr->nPt), &(wavAttr->dt), &(wavAttr->t0));
     wavAttr->t0 *= wavAttr->dt;
 
     strlcpy(buf, "HORizontal:FASTframe:STATE?;:HORizontal:FASTframe:COUNt?\n", sizeof(buf));
     ret = query_response(sockfd, buf, buf);
-    sscanf(buf, "%d;%zd", &isFastFrame, &(wavAttr->nFrames));
+    sscanf(buf, "%d;%zu", &isFastFrame, &(wavAttr->nFrames));
     if(isFastFrame) {
         printf("FastFrame mode, %zd frames per event.\n", wavAttr->nFrames);
         wavAttr->nPt *= wavAttr->nFrames;
@@ -309,7 +316,7 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
                  ":data:encdg FAStest;:WFMOutpre:BYT_Nr 1;"
                  ":WFMOutpre:YMUlt?;:WFMOutpre:YOFf?;:WFMOutpre:YZEro?");
         ret = query_response(sockfd, buf, buf);
-        sscanf(buf, "%lf;%lf;%lf", &(wavAttr->ymult[ich]), &(wavAttr->yoff[ich]),
+        sscanf(buf, "%f;%f;%f", &(wavAttr->ymult[ich]), &(wavAttr->yoff[ich]),
                &(wavAttr->yzero[ich]));
     }
 
@@ -327,14 +334,16 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
            wavAttr->yoff[0], wavAttr->yoff[1], wavAttr->yoff[2], wavAttr->yoff[3],
            wavAttr->yzero[0], wavAttr->yzero[1], wavAttr->yzero[2], wavAttr->yzero[3]);
     
+    /* set waveform range */
+    snprintf(buf, sizeof(buf), "data:start 1;:data:stop %zd\n", wavAttr->nPt);
+    ret = query_response(sockfd, buf, buf);
+
     strlcpy(buf, start_acquiring, sizeof(buf));
     ret = query_response(sockfd, buf, buf);
 
     /* data:source to selected channels */
     ret = query_response(sockfd, buf1, buf);
-    /* set waveform range */
-    snprintf(buf, sizeof(buf), "data:start 1;:data:stop %zd\n", wavAttr->nPt);
-    ret = query_response(sockfd, buf, buf);
+    
 
     return ret;
 }
@@ -370,7 +379,7 @@ static void *receive_and_push(void *arg)
                           may change it after each call */
     int sockfd, maxfd, nsel;
     fd_set rfd;
-    char ibuf[BUFSIZ];
+    char ibuf[16*BUFSIZ];
     size_t iEvent = 0;
     ssize_t nr, nw, rawEventSize, readTotal;
 /*
@@ -382,7 +391,8 @@ static void *receive_and_push(void *arg)
 */
     sockfd = *((int*)arg);
     if(nEvents > 0)
-        strlcpy(ibuf, "CURVENext?\n", sizeof(ibuf));
+      strlcpy(ibuf, "CURVENext?\n", sizeof(ibuf));
+    //strlcpy(ibuf, "CURVESTREAM?\n", sizeof(ibuf));
     else {
         strlcpy(ibuf, "CURVe?\n", sizeof(ibuf));
         nEvents = 1;
@@ -405,13 +415,16 @@ static void *receive_and_push(void *arg)
         if(nsel == 0) {
             warn("timed out");
         }
-        if(nsel>0 && FD_ISSET(sockfd, &rfd)) {
+        if(nsel>0 && FD_ISSET(sockfd, &rfd)) {	    
             nr = read(sockfd, ibuf, sizeof(ibuf));
             if(nr < 0) {
                 warn("read");
                 break;
             }
             readTotal += nr;
+	    //printf("data selected from the socket, reading out!\n");
+	    //printf("%lu: %s\n",nr,ibuf);
+	    fflush(stdout);
 //            write(fileno(fp), ibuf, nr);
             fifo_push(fifo, ibuf, nr);
         }
@@ -419,6 +432,8 @@ static void *receive_and_push(void *arg)
             goto end;
         }
         if(readTotal >= rawEventSize) {
+	  //printf("readTotal > rawEventSize, sending curvenext\n");
+	  // fflush(stdout);
             readTotal = 0;
             strlcpy(ibuf, "CURVENext?\n", sizeof(ibuf));
             nw = write(sockfd, ibuf, strnlen(ibuf, sizeof(ibuf)));
@@ -431,6 +446,9 @@ end:
     query_response(sockfd, ibuf, ibuf);
 
     strlcpy(ibuf, disable_fastframe, sizeof(ibuf));
+    query_response(sockfd, ibuf, ibuf);
+
+    strlcpy(ibuf, enable_display, sizeof(ibuf));
     query_response(sockfd, ibuf, ibuf);
 
 //    fclose(fp);

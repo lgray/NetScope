@@ -154,7 +154,6 @@ static size_t raw_event_size(struct hdf5io_waveform_file *wavFile)
 // this just reads the file as fast as it can and sticks it into the fifo for decoding
 static void *receive_and_push(FILE *infile)
 {        
-  printf("receive_and_push\n");
   
   doneReading = 0;
 
@@ -167,15 +166,12 @@ static void *receive_and_push(FILE *infile)
   }
   
   doneReading = 1;
-
-  printf("bai bai!\n");
   
   return (void*)NULL;
 }
 
 static void *pop_and_save(void *arg)
 {
-  printf("pop_and_save\n");
 
     int fStartEvent, fEndEvent, fStartCh, fGetNDig, fGetRetChLen; /* flags of states */
     size_t nDig=0, retChLen, iCh, iRetChLen=0, i, j, wavBufN;
@@ -206,8 +202,6 @@ static void *pop_and_save(void *arg)
 	  break; /* there will be nothing from the fifo any more */
 	  fifo_empty = 1;
 	}
-	printf("%lu %u %u %i %i %i %i %i\n", nr, doneReading, fifo_empty,
-	       fStartEvent, fEndEvent, fStartCh, fGetNDig, fGetRetChLen);
         for(i=0; i<nr; i++) {	  
             if(fStartEvent) {
                 printf("iEvent = %zd, ", iEvent);
@@ -285,7 +279,6 @@ static void *pop_and_save(void *arg)
         }
     }
 end:
-    printf("\npop_and_save died!\n");
     fflush(stdout);
     
 

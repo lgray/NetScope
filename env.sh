@@ -1,0 +1,7 @@
+#!/bin/sh
+
+export HDF5_ROOT_PATH=`pwd`/hdf5
+export HDF5_INCLUDE_PATH=${HDF5_ROOT_PATH}/include
+export HDF5_LIBRARY_PATH=${HDF5_ROOT_PATH}/lib
+
+export LD_LIBRARY_PATH=${HDF5_LIBRARY_PATH}:$LD_LIBRARY_PATH

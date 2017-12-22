@@ -10,8 +10,8 @@ SHLIB_EXT      := .so
 LIBS           := -lm
 LDFLAGS        :=
 ############################# Library add-ons #################################
-INCLUDE += -I/opt/local/include -I/usr/local/include -I${HOME}/hdf5-1.8.20/libs/hdf5/include
-LIBS    += -L/opt/local/lib -L/usr/local/lib -L${HOME}/hdf5-1.8.20/libs/hdf5/lib -lpthread -lhdf5
+INCLUDE += -I/opt/local/include -I/usr/local/include -I${HDF5_INCLUDE_PATH}
+LIBS    += -L/opt/local/lib -L/usr/local/lib -L${HDF5_LIBRARY_PATH} -lpthread -lhdf5
 GLLIBS   =
 ############################# OS & ARCH specifics #############################
 ifneq ($(OSTYPE), Linux)

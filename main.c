@@ -87,14 +87,16 @@
 #endif
 
 static char configure_fastframe[] = "ACQUIRE:MODE SAMPLE;:HORizontal:FASTframe:SEQuence FIRST;:HORizontal:FASTframe:COUNt 500\n";
-static char configure_capture[] = "HORIZONTAL:MODE:SCALE 500E-9;:CH1:POSITION 0E-3;:CH1:OFFSET 0E-3;:CH1:SCALE 1500E-3\n";
-static char configure_trigger1[] = "TRIGGER:A:TYPE EDGE;:TRIGGER:A:LEVEL 500.0000E-3;:TRIGGER:A:EDGE:SOURCE CH1\n";
+static char configure_capture[] = "HORIZONTAL:MODE:SCALE 500E-6;:CH1:POSITION 0E-3;:CH1:OFFSET 0E-3;:CH1:SCALE 2000E-3\n";
+static char configure_trigger1[] = "TRIGGER:A:TYPE EDGE;:TRIGGER:A:LEVEL 2500.0000E-3;:TRIGGER:A:EDGE:SOURCE CH1\n";
 static char configure_trigger2[] = "TRIGGER:A:EDGE:SLOPE:CH1 RISE;:TRIGGER:A:MODE NORMAL\n";
 
 static char force_trigger[] = "*TRG\n";
 
 static char gpib_init[] = "INIT\n";
 
+static char enable_display[] = "DISPLAY:WAVEFORM ON\n";
+static char disable_display[] = "DISPLAY:WAVEFORM OFF\n";
 
 static char clear_device[] = "CLEAR ALL\n";
 static char reset_to_default[] = "*RST\n";
@@ -109,6 +111,8 @@ static char acquire_singles[] = "ACQuire:STOPAfter SEQUENCE\n";
 
 static char enable_fastframe[] = "HORizontal:FASTframe:STATE ON\n";
 static char disable_fastframe[] = "HORizontal:FASTframe:STATE OFF\n";
+
+#define USE_DISPLAY 1
 
 static unsigned int chMask;
 static size_t nCh;
@@ -268,8 +272,10 @@ static int stop_scope(int sockfd) {
   strlcpy(buf, stop_acquiring, sizeof(buf));
   ret = query_response(sockfd, buf, buf);
   
-  strlcpy(buf, disable_fastframe, sizeof(buf));
-  ret = query_response(sockfd, buf, buf);
+  if( !USE_DISPLAY ) {
+    strlcpy(buf, enable_display, sizeof(buf));
+    ret = query_response(sockfd, buf, buf);
+  }
   
   strlcpy(buf, reset_counters, sizeof(buf));
   ret = query_response(sockfd, buf, buf);
@@ -338,11 +344,11 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
     sscanf(buf, "%zd;%lf;%lf", &(wavAttr->nPt), &(wavAttr->dt), &(wavAttr->t0));
     wavAttr->t0 *= wavAttr->dt;
         
-    strlcpy(buf, configure_fastframe, sizeof(buf));
-    ret = query_response(sockfd, buf, buf);
+    //strlcpy(buf, configure_fastframe, sizeof(buf));
+    //ret = query_response(sockfd, buf, buf);
 
-    strlcpy(buf, enable_fastframe, sizeof(buf));
-    ret = query_response(sockfd, buf, buf);
+    //strlcpy(buf, enable_fastframe, sizeof(buf));
+    //ret = query_response(sockfd, buf, buf);
     
     strlcpy(buf, "HORizontal:FASTframe:STATE?;:HORizontal:FASTframe:COUNt?\n", sizeof(buf));
     ret = query_response(sockfd, buf, buf);
@@ -398,6 +404,10 @@ static int prepare_scope(int sockfd, struct waveform_attribute *wavAttr)
     strlcpy(buf, reset_counters, sizeof(buf));
     ret = query_response(sockfd, buf, buf);
 
+    if( !USE_DISPLAY ) {
+      strlcpy(buf, disable_display, sizeof(buf));
+      ret = query_response(sockfd, buf, buf);
+    }
 
     return ret;
 }
